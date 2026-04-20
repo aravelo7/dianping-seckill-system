@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Cache Monitor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; background: #f5f7fb; color: #1f2937; }
+        header { padding: 20px 32px; background: #111827; color: #fff; }
+        main { padding: 24px 32px; }
+        .toolbar { display: flex; gap: 12px; margin-bottom: 20px; }
+        input { flex: 1; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; }
+        button { padding: 10px 16px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+        .card { padding: 18px; background: #fff; border-radius: 12px; box-shadow: 0 6px 18px rgba(15, 23, 42, .08); }
+        .label { font-size: 13px; color: #6b7280; }
+        .value { margin-top: 8px; font-size: 28px; font-weight: 700; }
+        table { width: 100%; margin-top: 24px; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }
+        th, td { padding: 14px 16px; border-bottom: 1px solid #e5e7eb; text-align: left; }
+        th { background: #eef2ff; }
+        .error { margin-top: 16px; color: #b91c1c; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>System Monitor / Cache Monitor</h1>
+</header>
+<main>
+    <div class="toolbar">
+        <input id="token" placeholder="Paste JWT token here. It will be sent as Authorization: Bearer <token>">
+        <button onclick="saveToken()">Save Token</button>
+        <button onclick="loadMetrics()">Refresh</button>
+        <button onclick="resetMetrics()">Reset</button>
+    </div>
+
+    <section class="grid">
+        <div class="card"><div class="label">Total Queries</div><div class="value" id="totalQueryCount">0</div></div>
+        <div class="card"><div class="label">Hit Rate</div><div class="value" id="hitRate">0%</div></div>
+        <div class="card"><div class="label">Cache Hits</div><div class="value" id="cacheHitCount">0</div></div>
+        <div class="card"><div class="label">Cache Misses</div><div class="value" id="cacheMissCount">0</div></div>
+        <div class="card"><div class="label">Null Cache Hits</div><div class="value" id="nullCacheHitCount">0</div></div>
+        <div class="card"><div class="label">Logical Expire</div><div class="value" id="logicalExpireTriggerCount">0</div></div>
+        <div class="card"><div class="label">Cache Rebuilds</div><div class="value" id="cacheRebuildCount">0</div></div>
+        <div class="card"><div class="label">DB Fallbacks</div><div class="value" id="dbFallbackCount">0</div></div>
+    </section>
+
+    <table>
+        <thead><tr><th>Rank</th><th>Hot Key</th><th>Access Count</th></tr></thead>
+        <tbody id="hotKeys"></tbody>
+    </table>
+    <div class="error" id="error"></div>
+</main>
+<script>
+    const tokenInput = document.getElementById('token');
+    tokenInput.value = localStorage.getItem('cache-monitor-token') || '';
+
+    function saveToken() {
+        localStorage.setItem('cache-monitor-token', tokenInput.value.trim());
+        loadMetrics();
+    }
+
+    async function loadMetrics() {
+        const token = localStorage.getItem('cache-monitor-token') || tokenInput.value.trim();
+        const error = document.getElementById('error');
+        error.textContent = '';
+        try {
+            const res = await fetch('/admin/cache/metrics', {
+                headers: token ? { Authorization: 'Bearer ' + token } : {}
+            });
+            const json = await res.json();
+            if (!json.success) {
+                error.textContent = json.errorMsg || 'Request failed';
+                return;
+            }
+            render(json.data || {});
+        } catch (e) {
+            error.textContent = e.message;
+        }
+    }
+
+    async function resetMetrics() {
+        const token = localStorage.getItem('cache-monitor-token') || tokenInput.value.trim();
+        const error = document.getElementById('error');
+        error.textContent = '';
+        try {
+            const res = await fetch('/admin/cache/metrics/reset', {
+                method: 'POST',
+                headers: token ? { Authorization: 'Bearer ' + token } : {}
+            });
+            const json = await res.json();
+            if (!json.success) {
+                error.textContent = json.errorMsg || 'Reset failed';
+                return;
+            }
+            loadMetrics();
+        } catch (e) {
+            error.textContent = e.message;
+        }
+    }
+
+    function render(data) {
+        const fields = ['totalQueryCount', 'cacheHitCount', 'cacheMissCount', 'nullCacheHitCount',
+            'logicalExpireTriggerCount', 'cacheRebuildCount', 'dbFallbackCount'];
+        fields.forEach(field => document.getElementById(field).textContent = data[field] || 0);
+        document.getElementById('hitRate').textContent = (((data.hitRate || 0) * 100).toFixed(2)) + '%';
+        document.getElementById('hotKeys').innerHTML = (data.topHotKeys || []).map((item, index) =>
+            `<tr><td>${index + 1}</td><td>${item.key}</td><td>${item.count}</td></tr>`
+        ).join('');
+    }
+
+    loadMetrics();
+</script>
+</body>
+</html>

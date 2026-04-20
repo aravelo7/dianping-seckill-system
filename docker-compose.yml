@@ -1,0 +1,49 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: dianping-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: hm_dianping
+    ports:
+      - "3307:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - ./src/main/resources/db/hmdp.sql:/docker-entrypoint-initdb.d/01-hmdp.sql:ro
+      - dianping-mysql-data:/var/lib/mysql
+
+  redis:
+    image: redis:7
+    container_name: dianping-redis
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: dianping-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  app:
+    build: .
+    container_name: dianping-app
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    environment:
+      MYSQL_URL: jdbc:mysql://mysql:3306/hm_dianping?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      MYSQL_USERNAME: root
+      MYSQL_PASSWORD: 123456
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      JWT_SECRET: hm-dianping-docker-jwt-secret-change-me
+    ports:
+      - "8081:8081"
+
+volumes:
+  dianping-mysql-data:
